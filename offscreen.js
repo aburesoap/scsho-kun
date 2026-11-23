@@ -27,6 +27,7 @@ async function handle(m) {
     case 'vstart': return vstart(m);
     case 'vstop': return vstop();
     case 'vcancel': vclean(); return {};
+    case 'sbegin': return sbegin(m);
     case 'diagPing': { // API 診断用
       let webp = false;
       try { const b = await new OffscreenCanvas(4, 4).convertToBlob({ type: 'image/webp' }); webp = b.type === 'image/webp'; } catch (e) {}
@@ -46,7 +47,7 @@ function newCanvas() {
 }
 
 async function add(m) {
-  const img = await createImageBitmap(await (await fetch(m.dataUrl)).blob());
+  const img = m.grab ? await grabFrame() : await createImageBitmap(await (await fetch(m.dataUrl)).blob());
   const k = img.width / m.vw; // 撮影画像の画素 / CSS px（画面の倍率）
   const sx = Math.round(m.rect.x * k), sw = Math.min(img.width - sx, Math.round(m.rect.w * k));
   if (!st.W) {
@@ -321,6 +322,51 @@ async function buildZip(files) {
   e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true);
   e.setUint32(12, cdSize, true); e.setUint32(16, off, true);
   return new Blob([...parts, ...central, e.buffer], { type: 'application/zip' });
+}
+
+/* ---------- タブの映像から 1 コマ取り出して撮影する（Android 用） ---------- */
+// Android では tabs.captureVisibleTab が動かない（GetWebContentsForID not implemented for Android）。
+// 録画と同じ tabCapture の映像を撮影のあいだ開いたままにして、スクロールのたびに最新のコマを使う。
+
+let S = null;
+
+async function sbegin(m) {
+  const W = Math.round(m.vw * m.dpr), H = Math.round(m.vh * m.dpr);
+  const src = { chromeMediaSource: 'tab', chromeMediaSourceId: m.streamId };
+  // 最小と最大の縦横比を変えておくと、画面の高さが変わっても（アドレスバーの出し入れなど）
+  // 黒帯を付けずにそのままの大きさで届く
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: { mandatory: { ...src, maxWidth: W, maxHeight: Math.round(H * 2), minWidth: 2, minHeight: 2, maxFrameRate: 30 } }
+  });
+  const vid = document.createElement('video');
+  vid.muted = true; vid.playsInline = true; vid.srcObject = stream;
+  await vid.play();
+  S = { stream, vid };
+  await nextFrame(3000); // 最初のコマが届くまで待つ
+  if (!vid.videoWidth) throw new Error(t('タブの映像が届きません'));
+  return { w: vid.videoWidth, h: vid.videoHeight };
+}
+
+// 次のコマが表示されるまで待つ（ページが止まっていてコマが来なければ ms で打ち切る）
+function nextFrame(ms) {
+  const vid = S.vid;
+  return new Promise(ok => {
+    let done = false;
+    const fin = () => { if (!done) { done = true; ok(); } };
+    if (vid.requestVideoFrameCallback) vid.requestVideoFrameCallback(fin);
+    setTimeout(fin, ms);
+  });
+}
+
+async function grabFrame() {
+  if (!S) throw new Error(t('タブの映像が開かれていません'));
+  if (S.stream.getVideoTracks()[0].readyState === 'ended') throw new Error(t('タブの映像が止まりました'));
+  await nextFrame(400); // スクロール後の新しいコマを使う
+  const vid = S.vid;
+  const cv = new OffscreenCanvas(vid.videoWidth, vid.videoHeight);
+  cv.getContext('2d').drawImage(vid, 0, 0);
+  return cv.transferToImageBitmap();
 }
 
 /* ---------- 録画（タブの映像を MediaRecorder で記録） ---------- */

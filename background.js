@@ -31,7 +31,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 chrome.runtime.onMessage.addListener((m, sender, send) => {
   if (m.target !== 'bg') return;
-  if (m.type === 'start') { start(m.tabId, m.mode || 'full'); send({ ok: true }); }
+  if (m.type === 'start') { start(m.tabId, m.mode || 'full', m.streamId); send({ ok: true }); }
   else if (m.type === 'cancel') { if (job) job.cancel = true; send({ ok: true }); }
   else if (m.type === 'video') { startVideo(m.tabId, m.mode, m.streamId); send({ ok: true }); }
   else if (m.type === 'stopVideo') { stopVideo(); send({ ok: true }); }
@@ -107,7 +107,29 @@ async function closeOffscreen() {
   try { await chrome.offscreen.closeDocument(); } catch (e) {}
 }
 
-async function start(tabId, mode = 'full') {
+// Android では captureVisibleTab が動かないので、ポップアップで取った tabCapture の streamId を使い、
+// タブの映像から 1 コマずつ取り出して撮影する（streamId があるときだけ）
+let isAndroid = null;
+async function onAndroid() {
+  if (isAndroid == null) { try { isAndroid = (await chrome.runtime.getPlatformInfo()).os === 'android'; } catch (e) { isAndroid = false; } }
+  return isAndroid;
+}
+
+// 映像を開く（streamId は数秒で使えなくなるので、範囲選択などより先に開く）
+async function openStream(tabId, streamId) {
+  const v = await exec(tabId, viewportInfo);
+  await closeOffscreen();
+  await ensureOffscreen();
+  await off({ type: 'sbegin', streamId, vw: v.vw, vh: v.vh, dpr: v.dpr });
+}
+
+// 見えている部分を 1 枚撮る。offscreen の add にそのまま渡す形で返す
+async function shoot(windowId, stream) {
+  if (stream) return { grab: true };
+  return { dataUrl: await chrome.tabs.captureVisibleTab(windowId, { format: 'png' }) }; // 劣化なしで受け取る
+}
+
+async function start(tabId, mode = 'full', streamId = null) {
   if (job) return;
   if ((await chrome.storage.session.get('rec')).rec) return; // 録画中は撮影しない
   const o = { ...DEF, ...(await chrome.storage.local.get(DEF)) };
@@ -119,11 +141,13 @@ async function start(tabId, mode = 'full') {
   try {
     const tab = await chrome.tabs.get(tabId);
     if (!/^(https?|file):/.test(tab.url || '')) throw new Error(t('このページ（{0}:）は撮影できません', (tab.url || '').split(':')[0]));
-    msg = mode === 'full' ? await run(tab, o, mode) : await runShot(tab, o, mode === 'area' ? 'area' : 'visible');
+    if (!streamId && await onAndroid()) throw new Error(t('Android ではポップアップのボタンから撮影してください'));
+    msg = mode === 'full' ? await run(tab, o, mode, streamId) : await runShot(tab, o, mode === 'area' ? 'area' : 'visible', streamId);
   } catch (e) {
     msg = t('エラー: {0}', e && e.message || e);
   } finally {
     try { await exec(tabId, restorePage); } catch (e) {}
+    if (streamId) await closeOffscreen(); // タブの映像を閉じる（「共有中」の表示を消す）
   }
   last = msg;
   chrome.action.setBadgeText({ text: msg.startsWith(t('エラー: {0}', '')) || msg === t('中止しました') ? '!' : '✓' });
@@ -132,11 +156,14 @@ async function start(tabId, mode = 'full') {
   job = null;
 }
 
-async function run(tab, o, mode = 'full') {
+async function run(tab, o, mode = 'full', streamId = null) {
   const tabId = tab.id;
+  if (streamId) await openStream(tabId, streamId);
   const info = await exec(tabId, preparePage);
-  await closeOffscreen();
-  await ensureOffscreen();
+  if (!streamId) {
+    await closeOffscreen();
+    await ensureOffscreen();
+  }
   await off({ type: 'begin', opts: o, title: info.title, url: info.url });
   const { save, saved } = makeSaver(o, baseName(info.title), { title: info.title, url: info.url, mode, tabId });
 
@@ -159,7 +186,7 @@ async function run(tab, o, mode = 'full') {
     const r = await exec(tabId, measure);
     const wait = 550 - (Date.now() - lastCap);
     if (wait > 0) await sleep(wait);
-    const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' }); // 劣化なしで受け取る
+    const shot = await shoot(tab.windowId, streamId);
     lastCap = Date.now(); shots++;
     first = false;
 
@@ -168,7 +195,7 @@ async function run(tab, o, mode = 'full') {
     let take = Math.min(r.rect.h - from, r.total - done);
     if (o.maxHeight > 0) take = Math.min(take, o.maxHeight - done);
     if (take > 0.5) {
-      const a = await off({ type: 'add', dataUrl, rect, vw: r.vw, srcTop: from, h: take, docTop: done, scrollY: sy });
+      const a = await off({ type: 'add', ...shot, rect, vw: r.vw, srcTop: from, h: take, docTop: done, scrollY: sy });
       done += take; stuck = 0;
       const tot = o.maxHeight > 0 ? Math.min(o.maxHeight, r.total) : r.total;
       if (a.part) {
@@ -319,8 +346,9 @@ function summary(o, saved, n) {
 }
 
 // 表示部分だけ・選択範囲を 1 回の撮影で保存する
-async function runShot(tab, o, mode) {
+async function runShot(tab, o, mode, streamId = null) {
   const tabId = tab.id;
+  if (streamId) await openStream(tabId, streamId);
   let rect = null;
   if (mode === 'area') {
     update(-1, t('ページ上をドラッグして範囲を選んでください（Esc で中止）'));
@@ -330,12 +358,14 @@ async function runShot(tab, o, mode) {
   }
   const v = await exec(tabId, viewportInfo);
   if (!rect) rect = v.rect;
-  await closeOffscreen();
-  await ensureOffscreen();
+  if (!streamId) {
+    await closeOffscreen();
+    await ensureOffscreen();
+  }
   await off({ type: 'begin', opts: o, title: v.title, url: v.url });
   update(0.5, t('撮影中…'));
-  const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
-  await off({ type: 'add', dataUrl, rect, vw: v.vw, srcTop: 0, h: rect.h, docTop: 0, scrollY: 0 });
+  const shot = await shoot(tab.windowId, streamId);
+  await off({ type: 'add', ...shot, rect, vw: v.vw, srcTop: 0, h: rect.h, docTop: 0, scrollY: 0 });
   update(0.9, t('保存中…'));
   const { save, saved } = makeSaver(o, baseName(v.title), { title: v.title, url: v.url, mode, tabId });
   const res = await off({ type: 'finish' });

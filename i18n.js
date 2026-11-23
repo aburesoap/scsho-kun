@@ -38,6 +38,8 @@ const EN = {
   '画像ファイル（WebP・PNG・JPEG は設定で選べます）。長いページは何枚かに分けて zip にまとめます。': 'Image file (choose WebP, PNG or JPEG in Settings). Long pages are split into several images in a zip.',
   '画像の形式': 'Image format', 'WebP（小さい・おすすめ）': 'WebP (small, recommended)', 'PNG（どこでも開ける）': 'PNG (opens anywhere)', 'JPEG（小さい・少し劣化）': 'JPEG (small, slight loss)',
   'A4 などの紙の大きさに区切った印刷用ページを開いて、印刷画面を出します。': 'Opens a print page split into paper-sized sheets and shows the print dialog.',
+  'このページは撮影できません：{0}': 'This page can’t be captured: {0}', 'Android ではポップアップのボタンから撮影してください': 'On Android, start capturing from the popup buttons',
+  'タブの映像が届きません': 'No video from the tab', 'タブの映像が開かれていません': 'Tab video is not open', 'タブの映像が止まりました': 'Tab video stopped',
   '録画中': 'Recording', 'このページは録画できません：{0}': 'This page can’t be recorded: {0}', '録画の準備中…': 'Preparing to record…',
   // 撮影の進み具合・結果
   'このページ（{0}:）は撮影できません': 'This page ({0}:) can’t be captured',

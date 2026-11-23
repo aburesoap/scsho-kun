@@ -69,21 +69,30 @@ function hideRec() { clearInterval(timer); $('recbox').classList.remove('on'); }
 
 async function activeTab() { const [t] = await chrome.tabs.query({ active: true, currentWindow: true }); return t; }
 
+// Android では captureVisibleTab が動かないので、録画と同じ tabCapture の映像から撮る。
+// streamId はボタンを押した（ユーザー操作の）この場で取る必要がある
+const android = chrome.runtime.getPlatformInfo().then(p => p.os === 'android', () => false);
+
 document.querySelectorAll('.btns.still button').forEach(b => b.onclick = async () => {
-  const t = await activeTab(); if (!t) return;
+  const tab = await activeTab(); if (!tab) return;
   const mode = b.dataset.mode;
-  chrome.runtime.sendMessage({ target: 'bg', type: 'start', tabId: t.id, mode });
+  let streamId = null;
+  if (await android) {
+    try { streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id }); }
+    catch (e) { $('msg').textContent = t('このページは撮影できません：{0}', e.message || e); return; }
+  }
+  chrome.runtime.sendMessage({ target: 'bg', type: 'start', tabId: tab.id, mode, streamId });
   if (mode === 'area') window.close(); // ページ上で範囲を選べるように閉じる
   else show(true, -1, t('準備中…'));
 });
 
 document.querySelectorAll('.btns.video button').forEach(b => b.onclick = async () => {
-  const t = await activeTab(); if (!t) return;
+  const tab = await activeTab(); if (!tab) return;
   const mode = b.dataset.vmode;
   let streamId = null;
-  try { streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: t.id }); }
+  try { streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id }); }
   catch (e) { $('msg').textContent = t('このページは録画できません：{0}', e.message || e); return; }
-  chrome.runtime.sendMessage({ target: 'bg', type: 'video', tabId: t.id, mode, streamId });
+  chrome.runtime.sendMessage({ target: 'bg', type: 'video', tabId: tab.id, mode, streamId });
   if (mode === 'area') window.close();
   else { setButtons(true); $('msg').textContent = t('録画の準備中…'); }
 });
