@@ -118,22 +118,3 @@ chrome.runtime.sendMessage({ target: 'bg', type: 'status' }).then(s => {
   else if (s.last) $('msg').textContent = s.last;
 });
 
-// API 診断（Android 対応の調査用）：いまのページで API を試して、結果ページを開く
-$('diag').onclick = async () => {
-  $('diag').disabled = true;
-  $('msg').textContent = 'API 診断中…（数秒〜数十秒かかります）';
-  let tabId = null, popup = { ua: navigator.userAgent, size: `${innerWidth}×${innerHeight}` };
-  try { const tb = await activeTab(); tabId = tb && tb.id; popup.tabsQuery = tb ? `OK id=${tb.id}` : '0 件'; }
-  catch (e) { popup.tabsQuery = '失敗: ' + (e.message || e); }
-  let streamId = null;
-  try { streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId }); popup.tabCapture = streamId ? 'streamId を取得できた' : '空'; }
-  catch (e) { popup.tabCapture = '失敗: ' + (e.message || e); }
-  popup.android = await android;
-  try {
-    const r = await chrome.runtime.sendMessage({ target: 'diag', type: 'run', tabId, popup, streamId });
-    if (!r || r.error) throw new Error(r ? r.error : '返事なし');
-    $('msg').textContent = `診断おわり：${r.count} 項目中 ${r.okCount} 項目が成功`;
-  } catch (e) { $('msg').textContent = '診断に失敗: ' + (e.message || e); $('diag').disabled = false; return; }
-  try { await chrome.tabs.create({ url: 'diag.html?via=tab' }); }
-  catch (e) { location.href = 'diag.html?via=popup'; }
-};

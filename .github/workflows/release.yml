@@ -1,0 +1,26 @@
+# リリースを公開すると、拡張機能に必要なファイルだけを zip にまとめて、そのリリースに添付する。
+# 最新版のダウンロードリンク：https://github.com/<所有者>/<リポジトリ>/releases/latest/download/scsho-kun-android.zip
+name: Release zip
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - name: Build zip
+        run: |
+          zip -r -X scsho-kun-android.zip manifest.json icon.png LICENSE *.js *.html _locales
+          unzip -l scsho-kun-android.zip
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" scsho-kun-android.zip --clobber --repo "${{ github.repository }}"

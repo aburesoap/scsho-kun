@@ -4,7 +4,7 @@
 
 const EN = {
   // 共通
-  'スクショくん': 'Snappy',
+  'スクショくん': 'Snappy', 'Android対応版（非公式）': 'for Android (unofficial)',
   '履歴': 'History', '画像': 'Image', '動画': 'Video', '印刷': 'Print', '設定': 'Settings', '中止': 'Cancel',
   '保存': 'Download', 'ダウンロード': 'Download', '削除': 'Delete', '開く': 'Open', 'すべて': 'All',
   'ページ全体': 'Whole page', '表示部分': 'Visible area', '選択範囲': 'Selected area', '部品': 'Element',
@@ -41,7 +41,6 @@ const EN = {
   'このページは撮影できません：{0}': 'This page can’t be captured: {0}', 'Android ではポップアップのボタンから撮影してください': 'On Android, start capturing from the popup buttons',
   'タブの映像が届きません': 'No video from the tab', 'タブの映像が開かれていません': 'Tab video is not open', 'タブの映像が止まりました': 'Tab video stopped',
   '途中でスクロールが止まりました（{0} / {1} px 地点、{2}）': 'Scrolling stopped partway ({0} / {1} px, {2})',
-  '1 画面ぶんで終わりました（{0}・{1}）': 'Finished after about one screen ({0} · {1})',
   '録画中': 'Recording', 'このページは録画できません：{0}': 'This page can’t be recorded: {0}', '録画の準備中…': 'Preparing to record…',
   // 撮影の進み具合・結果
   'このページ（{0}:）は撮影できません': 'This page ({0}:) can’t be captured',

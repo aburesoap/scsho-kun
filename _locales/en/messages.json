@@ -1,12 +1,12 @@
 {
   "name": {
-    "message": "Snappy – full-page screenshot & recorder"
+    "message": "Snappy for Android (unofficial)"
   },
   "short": {
-    "message": "Snappy"
+    "message": "Snappy Android"
   },
   "desc": {
-    "message": "Capture a whole web page, however long, as PDF, HTML or image in one click. Also captures areas, records video and prints."
+    "message": "Capture a whole web page, however long, as PDF, HTML or image. Also captures areas, records video and prints. Unofficial fork that also works on Android browsers such as Quetta."
   },
   "cmd": {
     "message": "Save the whole page (stops recording if recording)"

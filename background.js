@@ -4,7 +4,7 @@
 // ほかに「表示部分だけ」「選択範囲」の撮影と、タブの録画（表示部分・選択範囲）ができる。全体を 1 枚の画像にしないので
 // どんなに長いページでもメモリを使い切らない。
 
-importScripts('i18n.js', 'diag-bg.js');
+importScripts('i18n.js');
 
 const DEF = {
   format: 'pdf',     // pdf / html / image
@@ -211,8 +211,6 @@ async function run(tab, o, mode = 'full', streamId = null) {
       await sleep(o.bottomWait);
       const m = await exec(tabId, measure);
       if (m.total > r.total + 2) { pos = done; continue; }
-      // 1〜2 回で終わったときは、ページの長さの測り方を確かめられるよう数値を残す
-      if (shots <= 2) stopNote = t('1 画面ぶんで終わりました（{0}・{1}）', info.dbg || '', r.dbg || '');
       break;
     }
     if (stuck >= 3) {
@@ -529,9 +527,7 @@ function preparePage() {
     de.style.scrollBehavior = S.sb;
     if (el) { el.style.scrollBehavior = S.esb; el.scrollTop = S.orig; } else window.scrollTo(S.origX, S.orig);
   };
-  const desc = e => e ? `<${e.tagName.toLowerCase()}${e.id ? '#' + e.id : ''}${e.className && typeof e.className === 'string' ? '.' + e.className.trim().split(/\s+/).join('.') : ''}>` : '-';
-  return { title: document.title, url: location.href, mode: el ? 'element' : 'window',
-    dbg: `${el ? 'element ' + desc(el) : 'window'}・${document.compatMode}・scrollingElement=${desc(document.scrollingElement)}・pageH=${pageH}・vh=${innerHeight}` };
+  return { title: document.title, url: location.href, mode: el ? 'element' : 'window' };
 }
 
 function scrollToPos(pos) {
