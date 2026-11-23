@@ -27,6 +27,11 @@ async function handle(m) {
     case 'vstart': return vstart(m);
     case 'vstop': return vstop();
     case 'vcancel': vclean(); return {};
+    case 'diagPing': { // API 診断用
+      let webp = false;
+      try { const b = await new OffscreenCanvas(4, 4).convertToBlob({ type: 'image/webp' }); webp = b.type === 'image/webp'; } catch (e) {}
+      return { ok: true, offscreenCanvas: typeof OffscreenCanvas !== 'undefined', webp };
+    }
   }
   return {};
 }

@@ -4,7 +4,7 @@
 // ほかに「表示部分だけ」「選択範囲」の撮影と、タブの録画（表示部分・選択範囲）ができる。全体を 1 枚の画像にしないので
 // どんなに長いページでもメモリを使い切らない。
 
-importScripts('i18n.js');
+importScripts('i18n.js', 'diag-bg.js');
 
 const DEF = {
   format: 'pdf',     // pdf / html / image
