@@ -68,6 +68,7 @@ async function runDiag(m) {
 
   // API の有無（名前空間が存在するか）
   const ns = ['tabs', 'scripting', 'offscreen', 'tabCapture', 'downloads', 'debugger', 'windows', 'action', 'commands', 'contextMenus', 'sidePanel', 'storage', 'runtime', 'webNavigation'];
+  env.androidByUA = /Android/i.test(navigator.userAgent);
   env.namespaces = Object.fromEntries(ns.map(n => [n, !!chrome[n]]));
 
   let tab = null;
@@ -89,6 +90,20 @@ async function runDiag(m) {
   await diagStep(R, 'tabs.get（対象タブ）', async () => {
     tab = await chrome.tabs.get(tabId);
     return `id=${tab.id}、windowId=${tab.windowId}、active=${tab.active}、url=${(tab.url || '(取得できず)').slice(0, 80)}`;
+  });
+
+  await diagStep(R, 'tabCapture の映像から 1 コマ撮影（Android 用の撮影方式）', async () => {
+    if (!m.streamId) throw new Error('ポップアップで streamId を取れなかった');
+    const v = (await chrome.scripting.executeScript({ target: { tabId }, func: () => ({ vw: innerWidth, vh: innerHeight, dpr: devicePixelRatio }) }))[0].result;
+    try { await chrome.offscreen.closeDocument(); } catch (e) {}
+    await chrome.offscreen.createDocument({ url: 'offscreen.html', reasons: ['BLOBS', 'USER_MEDIA'], justification: 'API 診断' });
+    try {
+      const o = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'sbegin', streamId: m.streamId, vw: v.vw, vh: v.vh, dpr: v.dpr });
+      if (!o || o.error) throw new Error(o ? o.error : '返事なし');
+      const g = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'sgrab' });
+      if (!g || g.error) throw new Error(g ? g.error : '返事なし');
+      return `${g.w}×${g.h} px（画面 ${Math.round(v.vw * v.dpr)}×${Math.round(v.vh * v.dpr)} px 相当）`;
+    } finally { try { await chrome.offscreen.closeDocument(); } catch (e) {} }
   });
 
   await diagStep(R, 'windows.getCurrent', async () => {

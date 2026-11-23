@@ -109,10 +109,9 @@ async function closeOffscreen() {
 
 // Android では captureVisibleTab が動かないので、ポップアップで取った tabCapture の streamId を使い、
 // タブの映像から 1 コマずつ取り出して撮影する（streamId があるときだけ）
-let isAndroid = null;
+// Quetta などは getPlatformInfo で os=linux を返すので、UA で判定する
 async function onAndroid() {
-  if (isAndroid == null) { try { isAndroid = (await chrome.runtime.getPlatformInfo()).os === 'android'; } catch (e) { isAndroid = false; } }
-  return isAndroid;
+  return /Android/i.test(navigator.userAgent) || !!(navigator.userAgentData && navigator.userAgentData.mobile);
 }
 
 // 映像を開く（streamId は数秒で使えなくなるので、範囲選択などより先に開く）

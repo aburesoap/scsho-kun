@@ -28,6 +28,7 @@ async function handle(m) {
     case 'vstop': return vstop();
     case 'vcancel': vclean(); return {};
     case 'sbegin': return sbegin(m);
+    case 'sgrab': { const b = await grabFrame(); const r = { w: b.width, h: b.height }; b.close(); return r; } // API 診断用
     case 'diagPing': { // API 診断用
       let webp = false;
       try { const b = await new OffscreenCanvas(4, 4).convertToBlob({ type: 'image/webp' }); webp = b.type === 'image/webp'; } catch (e) {}
