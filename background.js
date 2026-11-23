@@ -166,7 +166,7 @@ async function run(tab, o, mode = 'full', streamId = null) {
   await off({ type: 'begin', opts: o, title: info.title, url: info.url });
   const { save, saved } = makeSaver(o, baseName(info.title), { title: info.title, url: info.url, mode, tabId });
 
-  let done = 0, pos = 0, first = true, stuck = 0, lastCap = 0, shots = 0;
+  let done = 0, pos = 0, first = true, stuck = 0, lastCap = 0, shots = 0, stopNote = '';
   for (;;) {
     if (job.cancel) { await closeOffscreen(); return t('中止しました'); }
 
@@ -213,7 +213,11 @@ async function run(tab, o, mode = 'full', streamId = null) {
       if (m.total > r.total + 2) { pos = done; continue; }
       break;
     }
-    if (stuck >= 3) break;
+    if (stuck >= 3) {
+      // スクロールしても位置が変わらなかった → 途中で止まった理由と数値を結果に残す
+      stopNote = t('途中でスクロールが止まりました（{0} / {1} px 地点、{2}）', Math.round(done).toLocaleString(), Math.round(r.total).toLocaleString(), r.dbg || '');
+      break;
+    }
     pos = done;
   }
 
@@ -221,7 +225,7 @@ async function run(tab, o, mode = 'full', streamId = null) {
   const res = await off({ type: 'finish' });
   if (res.last) await save(res.last, true);
   await closeOffscreen();
-  return summary(o, saved, res.total) + t('（{0} px、{1} 回撮影）', Math.round(done).toLocaleString(), shots);
+  return summary(o, saved, res.total) + t('（{0} px、{1} 回撮影）', Math.round(done).toLocaleString(), shots) + (stopNote ? '\n' + stopNote : '');
 }
 
 function recLabels() {
@@ -527,8 +531,18 @@ function preparePage() {
 
 function scrollToPos(pos) {
   const S = window.__lpp;
-  if (S.el) S.el.scrollTop = pos; else window.scrollTo(S.origX || 0, pos);
-  return true;
+  if (S.el) { S.el.scrollTop = pos; return { y: S.el.scrollTop }; }
+  // CSS の scroll-behavior:smooth に関係なく、すぐに動かす
+  try { window.scrollTo({ left: S.origX || 0, top: pos, behavior: 'instant' }); } catch (e) { window.scrollTo(S.origX || 0, pos); }
+  if (Math.abs(scrollY - pos) > 1) {
+    // 動かなければ、スクロールしている要素を直接動かす（ページによっては window.scrollTo が効かない）
+    for (const e of [document.scrollingElement, document.documentElement, document.body]) {
+      if (!e) continue;
+      e.scrollTop = pos;
+      if (Math.abs(scrollY - pos) <= 1) break;
+    }
+  }
+  return { y: scrollY };
 }
 
 function measure() {
@@ -541,10 +555,12 @@ function measure() {
     const y0 = Math.max(0, top), y1 = Math.min(innerHeight, top + e.clientHeight);
     out = { y: e.scrollTop + (y0 - top), total: e.scrollHeight,
       rect: { x: Math.max(0, left), y: y0, w: Math.min(e.clientWidth, innerWidth - Math.max(0, left)), h: y1 - y0 }, vw: innerWidth };
+    out.dbg = `element <${e.tagName.toLowerCase()}${e.id ? '#' + e.id : ''}>・scrollTop=${Math.round(e.scrollTop)}・h=${e.clientHeight}`;
   } else {
     const se = document.scrollingElement || de;
     const total = Math.max(se.scrollHeight, document.body ? document.body.scrollHeight : 0);
     out = { y: scrollY, total, rect: { x: 0, y: 0, w: de.clientWidth || innerWidth, h: de.clientHeight || innerHeight }, vw: innerWidth };
+    out.dbg = `window・scrollY=${Math.round(scrollY)}・vh=${innerHeight}・html=${de.scrollHeight}・body=${document.body ? document.body.scrollHeight : '-'}・vv=${window.visualViewport ? Math.round(visualViewport.pageTop) + '/' + visualViewport.scale.toFixed(2) : '-'}`;
   }
   return out;
 }
