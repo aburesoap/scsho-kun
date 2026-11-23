@@ -211,6 +211,8 @@ async function run(tab, o, mode = 'full', streamId = null) {
       await sleep(o.bottomWait);
       const m = await exec(tabId, measure);
       if (m.total > r.total + 2) { pos = done; continue; }
+      // 1〜2 回で終わったときは、ページの長さの測り方を確かめられるよう数値を残す
+      if (shots <= 2) stopNote = t('1 画面ぶんで終わりました（{0}・{1}）', info.dbg || '', r.dbg || '');
       break;
     }
     if (stuck >= 3) {
@@ -501,8 +503,9 @@ function preparePage() {
   if (old && old.restore) old.restore();
   const S = window.__lpp = { hidden: [], hiddenSet: new WeakSet() };
   const se = document.scrollingElement || document.documentElement;
+  const pageH = Math.max(se.scrollHeight, document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0);
   let el = null;
-  if (se.scrollHeight <= innerHeight + 5) {
+  if (pageH <= innerHeight + 5) {
     // ページ自体はスクロールしない → 中の一番大きなスクロール領域を探す
     let best = null, bs = 0;
     for (const e of document.querySelectorAll('body *')) {
@@ -526,7 +529,9 @@ function preparePage() {
     de.style.scrollBehavior = S.sb;
     if (el) { el.style.scrollBehavior = S.esb; el.scrollTop = S.orig; } else window.scrollTo(S.origX, S.orig);
   };
-  return { title: document.title, url: location.href, mode: el ? 'element' : 'window' };
+  const desc = e => e ? `<${e.tagName.toLowerCase()}${e.id ? '#' + e.id : ''}${e.className && typeof e.className === 'string' ? '.' + e.className.trim().split(/\s+/).join('.') : ''}>` : '-';
+  return { title: document.title, url: location.href, mode: el ? 'element' : 'window',
+    dbg: `${el ? 'element ' + desc(el) : 'window'}・${document.compatMode}・scrollingElement=${desc(document.scrollingElement)}・pageH=${pageH}・vh=${innerHeight}` };
 }
 
 function scrollToPos(pos) {
@@ -545,6 +550,8 @@ function scrollToPos(pos) {
   return { y: scrollY };
 }
 
+// 表示領域の大きさは、doctype のない（互換モードの）ページでは html の clientHeight がページ全体の長さになるので、
+// その場合は body の値を使い、innerWidth / innerHeight を上限にする
 function measure() {
   const S = window.__lpp;
   const de = document.documentElement;
@@ -558,8 +565,8 @@ function measure() {
     out.dbg = `element <${e.tagName.toLowerCase()}${e.id ? '#' + e.id : ''}>・scrollTop=${Math.round(e.scrollTop)}・h=${e.clientHeight}`;
   } else {
     const se = document.scrollingElement || de;
-    const total = Math.max(se.scrollHeight, document.body ? document.body.scrollHeight : 0);
-    out = { y: scrollY, total, rect: { x: 0, y: 0, w: de.clientWidth || innerWidth, h: de.clientHeight || innerHeight }, vw: innerWidth };
+    const total = Math.max(se.scrollHeight, de.scrollHeight, document.body ? document.body.scrollHeight : 0);
+    out = { y: scrollY, total, rect: { x: 0, y: 0, w: Math.min((document.compatMode === 'BackCompat' && document.body ? document.body : de).clientWidth || innerWidth, innerWidth), h: Math.min((document.compatMode === 'BackCompat' && document.body ? document.body : de).clientHeight || innerHeight, innerHeight) }, vw: innerWidth };
     out.dbg = `window・scrollY=${Math.round(scrollY)}・vh=${innerHeight}・html=${de.scrollHeight}・body=${document.body ? document.body.scrollHeight : '-'}・vv=${window.visualViewport ? Math.round(visualViewport.pageTop) + '/' + visualViewport.scale.toFixed(2) : '-'}`;
   }
   return out;
@@ -590,7 +597,7 @@ function restorePage() {
 
 function viewportInfo() {
   const de = document.documentElement;
-  return { rect: { x: 0, y: 0, w: de.clientWidth || innerWidth, h: de.clientHeight || innerHeight },
+  return { rect: { x: 0, y: 0, w: Math.min((document.compatMode === 'BackCompat' && document.body ? document.body : de).clientWidth || innerWidth, innerWidth), h: Math.min((document.compatMode === 'BackCompat' && document.body ? document.body : de).clientHeight || innerHeight, innerHeight) },
     vw: innerWidth, vh: innerHeight, dpr: devicePixelRatio, title: document.title, url: location.href };
 }
 
@@ -649,7 +656,8 @@ function selectArea(hintText, cancelText) {
 
 function visibleRecRect() {
   const de = document.documentElement;
-  const cw = de.clientWidth || innerWidth, ch = de.clientHeight || innerHeight;
+  // doctype のない（互換モードの）ページでは html の clientHeight がページ全体の長さになるので body を使う
+  const cw = Math.min((document.compatMode === 'BackCompat' && document.body ? document.body : de).clientWidth || innerWidth, innerWidth), ch = Math.min((document.compatMode === 'BackCompat' && document.body ? document.body : de).clientHeight || innerHeight, innerHeight);
   return { x: 4, y: 52, w: cw - 8, h: ch - 56 };
 }
 
