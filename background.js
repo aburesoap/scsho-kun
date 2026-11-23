@@ -351,7 +351,7 @@ async function runShot(tab, o, mode, streamId = null) {
   let rect = null;
   if (mode === 'area') {
     update(-1, t('ページ上をドラッグして範囲を選んでください（Esc で中止）'));
-    rect = await exec(tabId, selectArea, [t('ドラッグして範囲を選択 ・ Esc で中止')]);
+    rect = await exec(tabId, selectArea, [t('ドラッグして範囲を選択 ・ Esc で中止'), t('中止')]);
     if (!rect) return t('中止しました');
     await sleep(200); // 選択の枠が消えてから撮る
   }
@@ -392,7 +392,7 @@ async function startVideo(tabId, mode, streamId) {
     if (mode === 'area') {
       chrome.action.setBadgeBackgroundColor({ color: '#1d9bf0' });
       chrome.action.setBadgeText({ text: '…' });
-      rect = await exec(tabId, selectArea, [t('ドラッグして範囲を選択 ・ Esc で中止')]);
+      rect = await exec(tabId, selectArea, [t('ドラッグして範囲を選択 ・ Esc で中止'), t('中止')]);
       if (!rect) { await off({ type: 'vcancel' }).catch(() => {}); await closeOffscreen(); chrome.action.setBadgeText({ text: '' }); last = t('中止しました'); return; }
       await sleep(200);
     } else {
@@ -579,18 +579,22 @@ function viewportInfo() {
 }
 
 // ページ上でドラッグして範囲を選ぶ。{x,y,w,h}（表示領域の CSS px）か null を返す
-function selectArea(hintText) {
+function selectArea(hintText, cancelText) {
   return new Promise(resolve => {
     const host = document.createElement('div');
     host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647';
     const sh = host.attachShadow({ mode: 'closed' });
     sh.innerHTML = `<style>
-      .l{position:fixed;inset:0;cursor:crosshair;background:rgba(0,0,0,.25)}
+      .l{position:fixed;inset:0;cursor:crosshair;background:rgba(0,0,0,.25);touch-action:none;-webkit-user-select:none;user-select:none}
+      .x{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#fff;color:#0f1419;border:0;font:600 14px/1 system-ui,sans-serif;padding:10px 22px;border-radius:999px;box-shadow:0 2px 8px rgba(0,0,0,.3);cursor:pointer}
       .b{position:fixed;border:2px solid #1d9bf0;box-shadow:0 0 0 99999px rgba(0,0,0,.35);display:none;pointer-events:none}
       .h{position:fixed;left:50%;top:16px;transform:translateX(-50%);background:#0f1419;color:#fff;font:14px/1.4 system-ui,sans-serif;padding:8px 14px;border-radius:999px;pointer-events:none;white-space:nowrap}
       .s{position:fixed;background:#1d9bf0;color:#fff;font:12px system-ui,sans-serif;padding:2px 6px;border-radius:4px;pointer-events:none;display:none}
-    </style><div class="l"></div><div class="b"></div><div class="s"></div><div class="h"></div>`;
+    </style><div class="l"></div><div class="b"></div><div class="s"></div><div class="h"></div><button class="x"></button>`;
     sh.querySelector('.h').textContent = hintText || 'ドラッグして範囲を選択 ・ Esc で中止';
+    const x0 = sh.querySelector('.x');
+    x0.textContent = cancelText || '中止';
+    x0.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); done(null); });
     const l = sh.querySelector('.l'), bx = sh.querySelector('.b'), sz = sh.querySelector('.s'), hint = sh.querySelector('.h');
     let sx = 0, sy = 0, drag = false, r = null;
     const done = v => {
@@ -600,8 +604,14 @@ function selectArea(hintText) {
     };
     const key = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(null); } };
     addEventListener('keydown', key, true);
-    l.addEventListener('mousedown', e => { e.preventDefault(); drag = true; sx = e.clientX; sy = e.clientY; hint.style.display = 'none'; l.style.background = 'transparent'; });
-    l.addEventListener('mousemove', e => {
+    // マウスでも指でも同じに扱う（pointer イベント）。指でなぞってもページがスクロールしないよう touch-action:none
+    l.addEventListener('pointerdown', e => {
+      if (e.button) return;
+      e.preventDefault(); drag = true; sx = e.clientX; sy = e.clientY;
+      try { l.setPointerCapture(e.pointerId); } catch (_) {}
+      hint.style.display = x0.style.display = 'none'; l.style.background = 'transparent';
+    });
+    l.addEventListener('pointermove', e => {
       if (!drag) return;
       const x = Math.min(sx, e.clientX), y = Math.min(sy, e.clientY), w = Math.abs(e.clientX - sx), h = Math.abs(e.clientY - sy);
       r = { x, y, w, h };
@@ -609,11 +619,14 @@ function selectArea(hintText) {
       Object.assign(sz.style, { display: 'block', left: x + 'px', top: Math.max(0, y - 22) + 'px' });
       sz.textContent = `${Math.round(w)} × ${Math.round(h)}`;
     });
-    l.addEventListener('mouseup', () => {
+    const reset = () => { drag = false; r = null; bx.style.display = sz.style.display = 'none'; hint.style.display = x0.style.display = ''; l.style.background = ''; };
+    l.addEventListener('pointerup', () => {
+      if (!drag) return;
       drag = false;
-      if (!r || r.w < 8 || r.h < 8) { r = null; bx.style.display = sz.style.display = 'none'; hint.style.display = ''; l.style.background = ''; return; }
+      if (!r || r.w < 8 || r.h < 8) return reset();
       done(r); // 枠は撮影前に消えるので、選んだ範囲そのまま
     });
+    l.addEventListener('pointercancel', reset);
     document.documentElement.appendChild(host);
   });
 }

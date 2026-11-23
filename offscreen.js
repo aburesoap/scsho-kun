@@ -344,7 +344,7 @@ async function sbegin(m) {
   vid.muted = true; vid.playsInline = true; vid.srcObject = stream;
   await vid.play();
   S = { stream, vid };
-  await nextFrame(3000); // 最初のコマが届くまで待つ
+  if (!vid.videoWidth) await nextFrame(3000); // play() が済めばふつうは最初のコマが届いている
   if (!vid.videoWidth) throw new Error(t('タブの映像が届きません'));
   return { w: vid.videoWidth, h: vid.videoHeight };
 }
